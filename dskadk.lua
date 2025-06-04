@@ -24,12 +24,28 @@ local autoFishingEnabled = false
 local autoBuyEnabled = false
 local autoUseEnabled = false
 
--- 🧭 Teletrasporto al minigioco
+-- 🧭 Teletrasporto tramite portale + attivazione zona Fishing
 local function teleportToFishingMinigame()
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
-    hrp.CFrame = CFrame.new(1056, 7, -1575)
+
+    -- 1. Vai davanti al portale (rende il trigger attivabile)
+    hrp.CFrame = CFrame.new(-219, 4, -829)
+    wait(1.5)
+
+    -- 2. Attiva teleport (simula cliccare portale)
+    local args = {
+        workspace:WaitForChild("BlockRegions"):WaitForChild("Pirate Cove Digsite")
+            :WaitForChild("Interactive"):WaitForChild("Teleport")
+    }
+
+    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("Teleport")
+        :WaitForChild("TeleportClient"):FireServer(unpack(args))
+
+    -- 3. Attendi che il personaggio sia nella zona (opzionale delay aggiuntivo)
+    wait(3)
 end
+
 
 -- Mouse Hold
 local function getMidY(frame)
