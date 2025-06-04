@@ -29,10 +29,6 @@ local function teleportToFishingMinigame()
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
 
-    -- 1. Vai davanti al portale (rende il trigger attivabile)
-    hrp.CFrame = CFrame.new(-219, 4, -829)
-    wait(1.5)
-
     -- 2. Attiva teleport (simula cliccare portale)
     local args = {
         workspace:WaitForChild("BlockRegions"):WaitForChild("Pirate Cove Digsite")
@@ -41,6 +37,9 @@ local function teleportToFishingMinigame()
 
     game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("Teleport")
         :WaitForChild("TeleportClient"):FireServer(unpack(args))
+    -- 1. Vai davanti al portale (rende il trigger attivabile)
+    hrp.CFrame = CFrame.new(-250, 4, -829)
+    wait(1.5)
 
     -- 3. Attendi che il personaggio sia nella zona (opzionale delay aggiuntivo)
     wait(3)
