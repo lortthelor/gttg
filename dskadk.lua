@@ -38,7 +38,7 @@ local function teleportToFishingMinigame()
     game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("Teleport")
         :WaitForChild("TeleportClient"):FireServer(unpack(args))
     -- 1. Vai davanti al portale (rende il trigger attivabile)
-    hrp.CFrame = CFrame.new(-250, 4, -829)
+    hrp.CFrame = CFrame.new(-216, 4, -852)
     wait(1.5)
 
     -- 3. Attendi che il personaggio sia nella zona (opzionale delay aggiuntivo)
