@@ -17,7 +17,7 @@ local hatchEvent = replicated.Events.Eggs.Hatch
 local magnetEvent = replicated.Events.Tools.MagnetServer
 
 -- ⚙️ Valori
-local gui = player:WaitForChild("PlayerGui"):WaitForChild("FishingMinigame")
+local gui = player.PlayerGui:WaitForChild("FishingMinigame")
 local barFrame = gui:WaitForChild("BarFrame")
 local bobber = barFrame:WaitForChild("Bobber")
 local greenBar = barFrame:WaitForChild("GreenBar")
@@ -36,7 +36,6 @@ local autoFishingEnabled = false
 local autoBuyEnabled = false
 local autoUseEnabled = false
 local autoEggEnabled = false
-local autoMagnetEnabled = false
 local currentSuperEgg = nil
 
 -- 🧭 Funzioni base
@@ -56,7 +55,17 @@ local function stopMouseHold()
     virtualInput:SendMouseButtonEvent(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2, 0, false, game, 1)
 end
 
--- 🐟 AutoFishing + AutoBuy/Use
+-- 🔁 AutoFishing loop
+runService.Heartbeat:Connect(function()
+    if autoFishingEnabled and gui.Enabled then
+        local delta = getMidY(greenBar) - getMidY(bobber)
+        if delta > 20 then startMouseHold() elseif delta < 0 then stopMouseHold() end
+    else
+        stopMouseHold()
+    end
+end)
+
+-- 🐟 AutoFish + AutoBuy/Use
 local function autoFish()
     if not autoFishingEnabled then return end
     fishingFolder.CastRod:InvokeServer()
@@ -71,19 +80,14 @@ task.spawn(function()
     end
 end)
 
-runService.Heartbeat:Connect(function()
-    if autoFishingEnabled and gui.Enabled then
-        local delta = getMidY(greenBar) - getMidY(bobber)
-        if delta > 20 then startMouseHold() elseif delta < 0 then stopMouseHold() end
-    else
-        stopMouseHold()
-    end
-end)
-
 local function getBasicBaitStock()
-    local boosts = player:FindFirstChild("Boosts")
-    local basic = boosts and boosts:FindFirstChild("Basic Bait")
-    return basic and basic.Value or 0
+    local success, result = pcall(function()
+        local merchantFrame = player.PlayerGui:FindFirstChild("MainUi", true):FindFirstChild("FishingMerchanFrame", true)
+        local bait = merchantFrame and merchantFrame:FindFirstChild("Basic Bait", true)
+        local stock = bait and bait:FindFirstChild("Stock", true)
+        return tonumber(stock.Text:match("x(%d+)") or 0)
+    end)
+    return success and result or 0
 end
 
 local function checkAndBuyBait()
@@ -99,16 +103,17 @@ end
 local function checkAndUseBasicBait()
     if not autoUseEnabled then return end
     if getBasicBaitStock() > 0 then
-        local args = {"Basic Bait", 1}
-        replicated.Events.Boosts.Consume:FireServer(unpack(args))
+        boostFolder.Consume:FireServer("Basic Bait", 1)
     end
 end
 
 task.spawn(function()
     while true do
-        checkAndBuyBait()
-        checkAndUseBasicBait()
-        wait(5)
+        if autoFishingEnabled then
+            checkAndBuyBait()
+            checkAndUseBasicBait()
+        end
+        wait(10)
     end
 end)
 
@@ -131,13 +136,15 @@ local function teleportToZone(zoneName)
 end
 
 local function getSuperchargeZonePosition()
-    for _, zone in ipairs(teleportZones) do
-        teleportToZone(zone)
-        wait(2)
-        local sc = workspace:FindFirstChild("SuperchargeText")
-        if sc then return sc.CFrame.Position end
+    local sc = workspace:FindFirstChild("SuperchargeText")
+    if not sc then
+        for _, zone in ipairs(teleportZones) do
+            teleportToZone(zone)
+            sc = workspace:FindFirstChild("SuperchargeText")
+            if sc then break end
+        end
     end
-    return nil
+    return sc and sc.CFrame.Position or nil
 end
 
 local function checkForSuperchargedEgg()
@@ -154,12 +161,8 @@ local function checkForSuperchargedEgg()
                     teleportTo(zonePos)
                     wait(2.5)
                     autoFarmEvent:FireServer()
-                    if autoMagnetEnabled then
-                        for _ = 1, 6 do
-                            magnetEvent:FireServer()
-                            wait(0.2)
-                        end
-                    end
+                    magnetEvent:FireServer()
+                    wait(1)
                 end
                 teleportTo(egg:GetPivot().Position)
                 wait(1.5)
@@ -180,19 +183,17 @@ local function checkForSuperchargedEgg()
     end
 end
 
-runService.Heartbeat:Connect(function()
-    if autoEggEnabled then
+task.spawn(function()
+    while true do
         checkForSuperchargedEgg()
+        wait(60)
     end
 end)
 
 -- 🎨 GUI
-local guiMain = Instance.new("ScreenGui")
-guiMain.Name = "AutoSystemGUI"
-guiMain.Parent = player:WaitForChild("PlayerGui")
-
+local guiMain = Instance.new("ScreenGui", player.PlayerGui)
 local frame = Instance.new("Frame", guiMain)
-frame.Size = UDim2.new(0, 200, 0, 360)
+frame.Size = UDim2.new(0, 200, 0, 280)
 frame.Position = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
@@ -220,4 +221,3 @@ makeToggle("AutoFishing", 10, false, function(v) autoFishingEnabled = v end)
 makeToggle("AutoCompra Bait", 60, false, function(v) autoBuyEnabled = v end)
 makeToggle("AutoUsa Bait", 110, false, function(v) autoUseEnabled = v end)
 makeToggle("AutoSuperEgg", 160, false, function(v) autoEggEnabled = v end)
-makeToggle("AutoMagnet", 210, false, function(v) autoMagnetEnabled = v end)
