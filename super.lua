@@ -100,7 +100,7 @@ local function checkAndUseBasicBait()
     if not autoUseEnabled then return end
     if getBasicBaitStock() > 0 then
         local args = {"Basic Bait", 1}
-        replicated.Events.Boosts.Consume:FireServer(unpack(args))
+        boostFolder.Consume:FireServer(unpack(args))
     end
 end
 
@@ -120,22 +120,22 @@ local function teleportTo(pos)
 end
 
 local function teleportToZone(zoneName)
-    local ok, result = pcall(function()
-        local zone = workspace.BlockRegions:FindFirstChild(zoneName)
-        if zone then
-            local tp = zone.Interactive:FindFirstChild("Teleport")
+    local zone = workspace.BlockRegions:FindFirstChild(zoneName)
+    if zone then
+        local tp = zone.Interactive:FindFirstChild("Teleport")
+        if tp then
             teleportEvent:FireServer(tp)
+            wait(2.5)
         end
-    end)
-    if ok then wait(2.5) end
+    end
 end
 
 local function getSuperchargeZonePosition()
     for _, zone in ipairs(teleportZones) do
-        teleportToZone(zone)
-        wait(2)
         local sc = workspace:FindFirstChild("SuperchargeText")
         if sc then return sc.CFrame.Position end
+        teleportToZone(zone)
+        wait(1)
     end
     return nil
 end
@@ -180,7 +180,7 @@ local function checkForSuperchargedEgg()
     end
 end
 
-runService.Heartbeat:Connect(function()
+runService.Stepped:Connect(function()
     if autoEggEnabled then
         checkForSuperchargedEgg()
     end
@@ -195,6 +195,8 @@ local frame = Instance.new("Frame", guiMain)
 frame.Size = UDim2.new(0, 200, 0, 360)
 frame.Position = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.Active = true
+frame.Draggable = true
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
 
 local function makeToggle(name, y, default, callback)
