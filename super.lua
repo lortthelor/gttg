@@ -185,7 +185,7 @@ task.spawn(function()
         if autoEggEnabled then
             checkForSuperchargedEgg()
         end
-        wait(10)
+        wait(300)
     end
 end)
 
