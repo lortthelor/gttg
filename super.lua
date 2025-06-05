@@ -1,125 +1,223 @@
--- ⚙️ Setup
+-- ✅ SCRIPT COMPLETO "AUTO SYSTEM"
+-- Gestisce: AutoFishing + AutoBait + Supercharged Eggs + Hatch + Magnet + GUI
+
 local player = game.Players.LocalPlayer
 local replicated = game:GetService("ReplicatedStorage")
-local workspaceEggs = workspace:WaitForChild("Eggs")
+local runService = game:GetService("RunService")
+local virtualInput = game:GetService("VirtualInputManager")
+local camera = workspace.CurrentCamera
 
+-- 🔁 Remotes
+local fishingFolder = replicated:WaitForChild("Events"):WaitForChild("Minigames"):WaitForChild("Fishing")
+local boostFolder = replicated:WaitForChild("Events"):WaitForChild("Boosts")
+local teleportEvent = replicated.Events.Teleport.TeleportClient
 local autoFarmEvent = replicated.Events.Pets.ToggleAutoFarm
 local autoHatchEvent = replicated.Events.Eggs.ToggleAutoHatch
 local hatchEvent = replicated.Events.Eggs.Hatch
-local teleportEvent = replicated.Events.Teleport.TeleportClient
+local magnetEvent = replicated.Events.Tools.MagnetServer
 
-local currentSuperEgg = nil
+-- ⚙️ Valori
+local gui = player.PlayerGui:WaitForChild("FishingMinigame")
+local barFrame = gui:WaitForChild("BarFrame")
+local bobber = barFrame:WaitForChild("Bobber")
+local greenBar = barFrame:WaitForChild("GreenBar")
+local currency = player:WaitForChild("currency")
+local fishingCash = currency:WaitForChild("FishingCash")
 
--- 🌍 Zone da ciclare se non si trova SuperchargeText
+-- 🌍 Teleport zone fallback
 local teleportZones = {
-    "Jungle Digsite",
-    "Kingdom Digsite",
-    "Choco Digsite",
-    "Neon Digsite",
-    "Galaxy Digsite",
-    "Arcade Digsite"
+    "Jungle Digsite", "Kingdom Digsite", "Choco Digsite",
+    "Neon Digsite", "Galaxy Digsite", "Arcade Digsite"
 }
 
--- 🚪 Teletrasporto a una zona specifica
-local function teleportToZone(zoneName)
-    local success, result = pcall(function()
-        local zone = workspace:WaitForChild("BlockRegions"):WaitForChild(zoneName)
-        local teleporter = zone:WaitForChild("Interactive"):WaitForChild("Teleport")
-        teleportEvent:FireServer(teleporter)
-    end)
-    if success then
-        print("🗺️ Teletrasportato a:", zoneName)
-        wait(2.5)
+-- 🔘 Stati
+local isHolding = false
+local autoFishingEnabled = false
+local autoBuyEnabled = false
+local autoUseEnabled = false
+local autoEggEnabled = false
+local currentSuperEgg = nil
+
+-- 🧭 Funzioni base
+local function getMidY(frame)
+    return frame.AbsolutePosition.Y + (frame.AbsoluteSize.Y / 2)
+end
+
+local function startMouseHold()
+    if isHolding then return end
+    isHolding = true
+    virtualInput:SendMouseButtonEvent(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2, 0, true, game, 1)
+end
+
+local function stopMouseHold()
+    if not isHolding then return end
+    isHolding = false
+    virtualInput:SendMouseButtonEvent(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2, 0, false, game, 1)
+end
+
+-- 🔁 AutoFishing loop
+runService.Heartbeat:Connect(function()
+    if autoFishingEnabled and gui.Enabled then
+        local delta = getMidY(greenBar) - getMidY(bobber)
+        if delta > 20 then startMouseHold() elseif delta < 0 then stopMouseHold() end
     else
-        warn("❌ Errore nel teletrasporto alla zona:", zoneName)
+        stopMouseHold()
+    end
+end)
+
+-- 🐟 AutoFish + AutoBuy/Use
+local function autoFish()
+    if not autoFishingEnabled then return end
+    fishingFolder.CastRod:InvokeServer()
+    wait(2.5)
+    fishingFolder.ReelRod:InvokeServer()
+end
+
+task.spawn(function()
+    while true do
+        if autoFishingEnabled then autoFish() end
+        wait(4)
+    end
+end)
+
+local function getBasicBaitStock()
+    local success, result = pcall(function()
+        local merchantFrame = player.PlayerGui:FindFirstChild("MainUi", true):FindFirstChild("FishingMerchanFrame", true)
+        local bait = merchantFrame and merchantFrame:FindFirstChild("Basic Bait", true)
+        local stock = bait and bait:FindFirstChild("Stock", true)
+        return tonumber(stock.Text:match("x(%d+)") or 0)
+    end)
+    return success and result or 0
+end
+
+local function checkAndBuyBait()
+    if not autoBuyEnabled then return end
+    local value = fishingCash.Value
+    if value >= 8000 then
+        fishingFolder.BuyBait:InvokeServer("Divine Bait")
+    elseif value >= 1000 then
+        fishingFolder.BuyBait:InvokeServer("Basic Bait")
     end
 end
 
--- 📍 Trova la posizione della zona Supercharge
-local function getSuperchargeZonePosition()
-    local superObj = workspace:FindFirstChild("SuperchargeText")
+local function checkAndUseBasicBait()
+    if not autoUseEnabled then return end
+    if getBasicBaitStock() > 0 then
+        boostFolder.Consume:FireServer("Basic Bait", 1)
+    end
+end
 
-    if not superObj then
-        for _, zone in ipairs(teleportZones) do
-            teleportToZone(zone)
-            wait(2)
-            superObj = workspace:FindFirstChild("SuperchargeText")
-            if superObj then break end
+task.spawn(function()
+    while true do
+        if autoFishingEnabled then
+            checkAndBuyBait()
+            checkAndUseBasicBait()
         end
+        wait(10)
     end
+end)
 
-    if not superObj then
-        warn("⚠️ SuperchargeText non trovato nemmeno dopo cambio zone.")
-        return nil
-    end
-
-    return superObj.CFrame.Position
-end
-
--- 🚶 Funzione di teletrasporto a posizione 3D
-local function teleportTo(position)
+-- 🧠 Supercharged Egg Manager
+local function teleportTo(pos)
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
-    hrp.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0))
 end
 
--- 🔁 Funzione principale per gestire uovo Supercharged
+local function teleportToZone(zoneName)
+    local ok, result = pcall(function()
+        local zone = workspace.BlockRegions:FindFirstChild(zoneName)
+        if zone then
+            local tp = zone.Interactive:FindFirstChild("Teleport")
+            teleportEvent:FireServer(tp)
+        end
+    end)
+    if ok then wait(2.5) end
+end
+
+local function getSuperchargeZonePosition()
+    local sc = workspace:FindFirstChild("SuperchargeText")
+    if not sc then
+        for _, zone in ipairs(teleportZones) do
+            teleportToZone(zone)
+            sc = workspace:FindFirstChild("SuperchargeText")
+            if sc then break end
+        end
+    end
+    return sc and sc.CFrame.Position or nil
+end
+
 local function checkForSuperchargedEgg()
-    for _, egg in pairs(workspaceEggs:GetChildren()) do
+    if not autoEggEnabled then return end
+    for _, egg in pairs(workspace.Eggs:GetChildren()) do
         if egg:IsA("Model") and egg:FindFirstChild("Egg") then
-            local supercharge = egg.Egg:FindFirstChild("Supercharge")
-            local isSuper = egg:GetAttribute("Supercharged")
-
-            if supercharge and isSuper and egg.Name ~= currentSuperEgg then
-                print("📦 Trovato nuovo Supercharged Egg:", egg.Name)
-
-                -- 🔴 Disattiva solo AutoFarm
+            local sc = egg.Egg:FindFirstChild("Supercharge")
+            if sc and egg:GetAttribute("Supercharged") and egg.Name ~= currentSuperEgg then
+                print("🚨 Trovato nuovo Supercharged Egg:", egg.Name)
                 autoFarmEvent:FireServer()
                 wait(1)
-
-                -- 📍 Zona Supercharge
-                local zonePosition = getSuperchargeZonePosition()
-                if zonePosition then
-                    teleportTo(zonePosition)
+                local zonePos = getSuperchargeZonePosition()
+                if zonePos then
+                    teleportTo(zonePos)
                     wait(2.5)
                     autoFarmEvent:FireServer()
+                    magnetEvent:FireServer()
                     wait(1)
-                else
-                    print("⚠️ Nessuna zona Supercharge trovata, procedo solo con Hatch.")
                 end
-
-                -- 🥚 Teletrasporto all’uovo
                 teleportTo(egg:GetPivot().Position)
                 wait(1.5)
-
-                -- ✅ Verifica e attiva AutoHatch se non già attivo
-                local autoHatchValue = player:FindFirstChild("AutoHatch")
-                if autoHatchValue and not autoHatchValue.Value then
+                local autoHatch = player:FindFirstChild("AutoHatch")
+                if autoHatch and not autoHatch.Value then
                     autoHatchEvent:FireServer()
                     wait(0.5)
                 end
-
-                -- 🐣 Hatch tramite args (corretta struttura richiesta dal gioco)
-                local eggModel = workspace.Eggs:FindFirstChild(egg.Name)
-                if eggModel then
-                    local args = {eggModel, 14}
-                    hatchEvent:FireServer(unpack(args))
-                    print("✅ Hatch avviato correttamente su:", eggModel.Name)
-                else
-                    warn("❌ Egg non trovato per Hatch:", egg.Name)
+                local model = workspace.Eggs:FindFirstChild(egg.Name)
+                if model then
+                    hatchEvent:FireServer(unpack({model, 14}))
+                    print("✅ Hatch avviato su:", model.Name)
+                    currentSuperEgg = egg.Name
                 end
-
-                currentSuperEgg = egg.Name
                 return
             end
         end
     end
 end
 
--- 🔄 Ciclo ogni 60 secondi
 task.spawn(function()
     while true do
         checkForSuperchargedEgg()
         wait(60)
     end
 end)
+
+-- 🎨 GUI
+local guiMain = Instance.new("ScreenGui", player.PlayerGui)
+local frame = Instance.new("Frame", guiMain)
+frame.Size = UDim2.new(0, 200, 0, 280)
+frame.Position = UDim2.new(0, 20, 0, 20)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+local function makeToggle(name, y, default, callback)
+    local btn = Instance.new("TextButton", frame)
+    btn.Size = UDim2.new(1, -20, 0, 40)
+    btn.Position = UDim2.new(0, 10, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 16
+    btn.Text = name .. ": OFF"
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
+    local active = default
+    btn.MouseButton1Click:Connect(function()
+        active = not active
+        btn.Text = name .. ": " .. (active and "ON" or "OFF")
+        callback(active)
+    end)
+end
+
+makeToggle("AutoFishing", 10, false, function(v) autoFishingEnabled = v end)
+makeToggle("AutoCompra Bait", 60, false, function(v) autoBuyEnabled = v end)
+makeToggle("AutoUsa Bait", 110, false, function(v) autoUseEnabled = v end)
+makeToggle("AutoSuperEgg", 160, false, function(v) autoEggEnabled = v end)
