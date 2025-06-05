@@ -1,82 +1,56 @@
--- ✅ SCRIPT COMPLETO "AUTO SYSTEM" OTTIMIZZATO
--- Gestisce: AutoFishing + AutoBait + Supercharged Eggs + Hatch + Magnet + GUI
+-- ✅ SCRIPT COMPLETO "AUTO SYSTEM" REVISIONATO
+-- Gestisce: AutoFishing + AutoBait (con consumo corretto) + Supercharged Eggs + Hatch + Magnet + GUI Migliorata e Draggabile
 
 local player = game.Players.LocalPlayer
 local replicated = game:GetService("ReplicatedStorage")
 local runService = game:GetService("RunService")
 local virtualInput = game:GetService("VirtualInputManager")
 local camera = workspace.CurrentCamera
+local userInput = game:GetService("UserInputService")
 
 -- 🔁 Remotes
-local fishingFolder = replicated:WaitForChild("Events"):WaitForChild("Minigames"):WaitForChild("Fishing")
-local boostFolder = replicated:WaitForChild("Events"):WaitForChild("Boosts")
+local fishingFolder = replicated.Events.Minigames.Fishing
+local boostFolder = replicated.Events.Boosts
 local teleportEvent = replicated.Events.Teleport.TeleportClient
 local autoFarmEvent = replicated.Events.Pets.ToggleAutoFarm
 local autoHatchEvent = replicated.Events.Eggs.ToggleAutoHatch
 local hatchEvent = replicated.Events.Eggs.Hatch
 local magnetEvent = replicated.Events.Tools.MagnetServer
 
--- ⚙️ Valori
-local gui = player:WaitForChild("PlayerGui"):WaitForChild("FishingMinigame")
-local barFrame = gui:WaitForChild("BarFrame")
+-- 🧱 Interfacce e Valori
+local fishingGui = player:WaitForChild("PlayerGui"):WaitForChild("FishingMinigame")
+local barFrame = fishingGui:WaitForChild("BarFrame")
 local bobber = barFrame:WaitForChild("Bobber")
 local greenBar = barFrame:WaitForChild("GreenBar")
-local currency = player:WaitForChild("currency")
-local fishingCash = currency:WaitForChild("FishingCash")
+local fishingCash = player:WaitForChild("currency"):WaitForChild("FishingCash")
 
--- 🌍 Teleport zone fallback
-local teleportZones = {
-    "Jungle Digsite", "Kingdom Digsite", "Choco Digsite",
-    "Neon Digsite", "Galaxy Digsite", "Arcade Digsite"
-}
+-- 🧭 Variabili
+local teleportZones = {"Jungle Digsite", "Kingdom Digsite", "Choco Digsite", "Neon Digsite", "Galaxy Digsite", "Arcade Digsite"}
+local autoFishingEnabled, autoBuyEnabled, autoUseEnabled, autoEggEnabled, autoMagnetEnabled = false, false, false, false, false
+local isHolding, flagsPlaced = false, false
+local currentSuperEgg, lastEggCheckTime = nil, 0
 
--- 🔘 Stati
-local isHolding = false
-local autoFishingEnabled = false
-local autoBuyEnabled = false
-local autoUseEnabled = false
-local autoEggEnabled = false
-local autoMagnetEnabled = false
-local currentSuperEgg = nil
-local currentSuperZone = nil
-local flagsPlaced = false
-local lastCheckedEgg = nil
-local lastCheckTime = 0
-
--- 🧭 Funzioni base
+-- 🖱️ Fishing Hold
 local function getMidY(frame)
-    return frame.AbsolutePosition.Y + (frame.AbsoluteSize.Y / 2)
+    return frame.AbsolutePosition.Y + frame.AbsoluteSize.Y / 2
 end
 
 local function startMouseHold()
-    if isHolding then return end
-    isHolding = true
-    virtualInput:SendMouseButtonEvent(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2, 0, true, game, 1)
+    if not isHolding then
+        isHolding = true
+        virtualInput:SendMouseButtonEvent(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2, 0, true, game, 1)
+    end
 end
 
 local function stopMouseHold()
-    if not isHolding then return end
-    isHolding = false
-    virtualInput:SendMouseButtonEvent(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2, 0, false, game, 1)
-end
-
--- 🐟 AutoFishing + AutoBuy/Use
-local function autoFish()
-    if not autoFishingEnabled then return end
-    fishingFolder.CastRod:InvokeServer()
-    wait(2.5)
-    fishingFolder.ReelRod:InvokeServer()
-end
-
-task.spawn(function()
-    while true do
-        if autoFishingEnabled then autoFish() end
-        wait(4)
+    if isHolding then
+        isHolding = false
+        virtualInput:SendMouseButtonEvent(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2, 0, false, game, 1)
     end
-end)
+end
 
 runService.Heartbeat:Connect(function()
-    if autoFishingEnabled and gui.Enabled then
+    if autoFishingEnabled and fishingGui.Enabled then
         local delta = getMidY(greenBar) - getMidY(bobber)
         if delta > 20 then startMouseHold() elseif delta < 0 then stopMouseHold() end
     else
@@ -84,164 +58,156 @@ runService.Heartbeat:Connect(function()
     end
 end)
 
+-- 🎣 AutoFishing Core
+local function autoFish()
+    fishingFolder.CastRod:InvokeServer()
+    task.wait(2.5)
+    fishingFolder.ReelRod:InvokeServer()
+end
+
+-- 🪱 Bait
 local function getBasicBaitStock()
     local boosts = player:FindFirstChild("Boosts")
-    local basic = boosts and boosts:FindFirstChild("Basic Bait")
-    return basic and basic.Value or 0
+    local bait = boosts and boosts:FindFirstChild("Basic Bait")
+    return bait and bait.Value or 0
 end
 
-local function checkAndBuyBait()
-    if not autoBuyEnabled then return end
-    local value = fishingCash.Value
-    if value >= 8000 then
-        fishingFolder.BuyBait:InvokeServer("Divine Bait")
-    elseif value >= 1000 then
-        fishingFolder.BuyBait:InvokeServer("Basic Bait")
+local function checkBait()
+    if autoBuyEnabled then
+        local val = fishingCash.Value
+        if val >= 8000 then
+            fishingFolder.BuyBait:InvokeServer("Divine Bait")
+        elseif val >= 1000 then
+            fishingFolder.BuyBait:InvokeServer("Basic Bait")
+        end
+    end
+    if autoUseEnabled and getBasicBaitStock() > 0 then
+        boostFolder.Consume:FireServer("Basic Bait", 1)
     end
 end
 
-local function checkAndUseBasicBait()
-    if not autoUseEnabled then return end
-    if getBasicBaitStock() > 0 then
-        local args = {"Basic Bait", 1}
-        replicated:WaitForChild("Events"):WaitForChild("Boosts"):WaitForChild("Consume"):FireServer(unpack(args))
-    end
-end
-
-task.spawn(function()
-    while true do
-        checkAndBuyBait()
-        checkAndUseBasicBait()
-        wait(10)
-    end
-end)
-
--- 🧠 Supercharged Egg Manager
-local function teleportTo(pos)
+-- 🥚 Supercharged Eggs
+local function teleportTo(cframe)
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
-    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0))
+    hrp.CFrame = CFrame.new(cframe + Vector3.new(0, 4, 0))
 end
 
-local function teleportToZone(zoneName)
-    local zone = workspace.BlockRegions:FindFirstChild(zoneName)
-    if zone then
-        local tp = zone.Interactive:FindFirstChild("Teleport")
-        if tp then
-            teleportEvent:FireServer(tp)
-            wait(2.5)
+local function findSuperchargedZone()
+    for _, zoneName in ipairs(teleportZones) do
+        local region = workspace.BlockRegions:FindFirstChild(zoneName)
+        if region then
+            local portal = region.Interactive and region.Interactive:FindFirstChild("Teleport")
+            if portal then
+                teleportEvent:FireServer(portal)
+                task.wait(2.5)
+                local sc = workspace:FindFirstChild("SuperchargeText")
+                if sc then return sc.Position end
+            end
         end
-    end
-end
-
-local function getSuperchargeZonePosition()
-    for _, zone in ipairs(teleportZones) do
-        teleportToZone(zone)
-        wait(1.5)
-        local sc = workspace:FindFirstChild("SuperchargeText")
-        if sc then
-            currentSuperZone = zone
-            return sc.CFrame.Position
-        end
+        task.wait(1)
     end
     return nil
 end
 
-local function checkForSuperchargedEgg()
-    if not autoEggEnabled then return end
-    local now = tick()
-    if now - lastCheckTime < 60 then return end
-    lastCheckTime = now
+local function checkSuperchargedEgg()
+    if tick() - lastEggCheckTime < 60 then return end
+    lastEggCheckTime = tick()
+
     for _, egg in pairs(workspace.Eggs:GetChildren()) do
-        if egg:IsA("Model") and egg:FindFirstChild("Egg") then
-            local sc = egg.Egg:FindFirstChild("Supercharge")
-            if sc and egg:GetAttribute("Supercharged") and egg.Name ~= currentSuperEgg then
-                print("🚨 Trovato nuovo Supercharged Egg:", egg.Name)
-                local zonePos = getSuperchargeZonePosition()
-                if zonePos then
-                    teleportTo(zonePos)
-                    wait(1.5)
-                    autoFarmEvent:FireServer()
-                    if autoMagnetEnabled and not flagsPlaced then
-                        for _ = 1, 6 do
-                            magnetEvent:FireServer()
-                            wait(0.2)
-                        end
-                        flagsPlaced = true
+        local isCharged = egg:GetAttribute("Supercharged")
+        if isCharged and egg.Name ~= currentSuperEgg then
+            currentSuperEgg = egg.Name
+            local zonePos = findSuperchargedZone()
+            if zonePos then
+                teleportTo(zonePos)
+                task.wait(2)
+                if autoMagnetEnabled and not flagsPlaced then
+                    for _ = 1, 6 do
+                        magnetEvent:FireServer()
+                        task.wait(0.2)
                     end
+                    flagsPlaced = true
                 end
-                teleportTo(egg:GetPivot().Position)
-                wait(1.5)
-                local autoHatch = player:FindFirstChild("AutoHatch")
-                if autoHatch and not autoHatch.Value then
-                    autoHatchEvent:FireServer()
-                    wait(0.5)
-                end
-                autoFarmEvent:FireServer()
-                local model = workspace.Eggs:FindFirstChild(egg.Name)
-                if model then
-                    hatchEvent:FireServer(unpack({model, 14}))
-                    print("✅ Hatch avviato su:", model.Name)
-                    currentSuperEgg = egg.Name
-                end
-                return
             end
+
+            teleportTo(egg:GetPivot().Position)
+            task.wait(2)
+
+            local autoFarm = player:FindFirstChild("AutoFarm")
+            if autoFarm and not autoFarm.Value then autoFarmEvent:FireServer() end
+
+            local autoHatch = player:FindFirstChild("AutoHatch")
+            if autoHatch and not autoHatch.Value then autoHatchEvent:FireServer() end
+
+            hatchEvent:FireServer(egg, 14)
+            warn("✅ Hatch attivo su:", egg.Name)
         end
     end
 end
 
-runService.Heartbeat:Connect(function()
-    if autoEggEnabled then
-        checkForSuperchargedEgg()
+-- 🔁 Loop
+task.spawn(function()
+    while true do
+        if autoFishingEnabled then autoFish() end
+        if autoBuyEnabled or autoUseEnabled then checkBait() end
+        if autoEggEnabled then checkSuperchargedEgg() end
+        task.wait(5)
     end
 end)
 
--- 🎨 GUI
-local guiMain = Instance.new("ScreenGui")
-guiMain.Name = "AutoSystemGUI"
-guiMain.Parent = player:WaitForChild("PlayerGui")
-
-local frame = Instance.new("Frame", guiMain)
-frame.Size = UDim2.new(0, 200, 0, 360)
-frame.Position = UDim2.new(0, 20, 0, 20)
-frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+-- 🧩 GUI Bella & Draggabile
+local gui = Instance.new("ScreenGui", player.PlayerGui)
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 230, 0, 300)
+frame.Position = UDim2.new(0, 25, 0, 80)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+frame.BorderSizePixel = 0
 frame.Active = true
-frame.Draggable = false
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+local corner = Instance.new("UICorner", frame) corner.CornerRadius = UDim.new(0, 12)
 
-local drag = Instance.new("TextButton")
-drag.Size = frame.Size
-drag.Position = UDim2.new(0, 0, 0, 0)
-drag.BackgroundTransparency = 1
-drag.Text = ""
-drag.Parent = frame
-frame.Active = true
-drag.Draggable = true
+-- 🖱️ Drag Manuale
+local dragging, dragInput, dragStart, startPos
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+userInput.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
 
-local function makeToggle(name, y, default, callback)
-    local btn = Instance.new("TextButton", frame)
-    btn.Size = UDim2.new(1, -20, 0, 40)
-    btn.Position = UDim2.new(0, 10, 0, y)
-    btn.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 16
-    btn.Text = name .. ": OFF"
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+-- 🔘 Toggle Buttons
+local function makeToggle(label, yPos, callback)
+    local button = Instance.new("TextButton", frame)
+    button.Size = UDim2.new(1, -20, 0, 30)
+    button.Position = UDim2.new(0, 10, 0, yPos)
+    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Text = label .. ": OFF"
+    button.Font = Enum.Font.GothamSemibold
+    button.TextSize = 14
+    button.AutoButtonColor = false
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
 
-    local active = default
-    btn.MouseButton1Click:Connect(function()
+    local active = false
+    button.MouseButton1Click:Connect(function()
         active = not active
-        btn.Text = name .. ": " .. (active and "ON" or "OFF")
+        button.Text = label .. ": " .. (active and "ON" or "OFF")
         callback(active)
     end)
 end
 
-makeToggle("AutoFishing", 10, false, function(v) autoFishingEnabled = v end)
-makeToggle("AutoCompra Bait", 60, false, function(v) autoBuyEnabled = v end)
-makeToggle("AutoUsa Bait", 110, false, function(v) autoUseEnabled = v end)
-makeToggle("AutoSuperEgg", 160, false, function(v) autoEggEnabled = v end)
-makeToggle("AutoMagnet", 210, false, function(v)
-    autoMagnetEnabled = v
-    flagsPlaced = false
-end)
+makeToggle("Auto Fishing", 10, function(b) autoFishingEnabled = b end)
+makeToggle("Compra Bait", 50, function(b) autoBuyEnabled = b end)
+makeToggle("Usa Bait", 90, function(b) autoUseEnabled = b end)
+makeToggle("Supercharged Egg", 130, function(b) autoEggEnabled = b end)
+makeToggle("Magnet Flags", 170, function(b) autoMagnetEnabled = b flagsPlaced = false end)
