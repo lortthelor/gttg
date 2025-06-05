@@ -104,7 +104,7 @@ local function checkAndUseBasicBait()
     if not autoUseEnabled then return end
     if getBasicBaitStock() > 0 then
         local args = {"Basic Bait", 1}
-        boostFolder:WaitForChild("Consume"):FireServer(unpack(args))
+        replicated:WaitForChild("Events"):WaitForChild("Boosts"):WaitForChild("Consume"):FireServer(unpack(args))
     end
 end
 
@@ -161,6 +161,7 @@ local function checkForSuperchargedEgg()
                 if zonePos then
                     teleportTo(zonePos)
                     wait(1.5)
+                    autoFarmEvent:FireServer()
                     if autoMagnetEnabled and not flagsPlaced then
                         for _ = 1, 6 do
                             magnetEvent:FireServer()
@@ -205,8 +206,17 @@ frame.Size = UDim2.new(0, 200, 0, 360)
 frame.Position = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.Active = true
-frame.Draggable = true
+frame.Draggable = false
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+local drag = Instance.new("TextButton")
+drag.Size = frame.Size
+drag.Position = UDim2.new(0, 0, 0, 0)
+drag.BackgroundTransparency = 1
+drag.Text = ""
+drag.Parent = frame
+frame.Active = true
+drag.Draggable = true
 
 local function makeToggle(name, y, default, callback)
     local btn = Instance.new("TextButton", frame)
