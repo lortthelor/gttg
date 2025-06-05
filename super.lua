@@ -99,7 +99,8 @@ end
 local function checkAndUseBasicBait()
     if not autoUseEnabled then return end
     if getBasicBaitStock() > 0 then
-        boostFolder.Consume:FireServer("Basic Bait", 1)
+        local args = {"Basic Bait", 1}
+        replicated.Events.Boosts.Consume:FireServer(unpack(args))
     end
 end
 
@@ -191,7 +192,7 @@ guiMain.Name = "AutoSystemGUI"
 guiMain.Parent = player:WaitForChild("PlayerGui")
 
 local frame = Instance.new("Frame", guiMain)
-frame.Size = UDim2.new(0, 200, 0, 320)
+frame.Size = UDim2.new(0, 200, 0, 360)
 frame.Position = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
