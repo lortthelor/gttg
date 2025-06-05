@@ -17,7 +17,7 @@ local hatchEvent = replicated.Events.Eggs.Hatch
 local magnetEvent = replicated.Events.Tools.MagnetServer
 
 -- ⚙️ Valori
-local gui = player.PlayerGui:WaitForChild("FishingMinigame")
+local gui = player:WaitForChild("PlayerGui"):WaitForChild("FishingMinigame")
 local barFrame = gui:WaitForChild("BarFrame")
 local bobber = barFrame:WaitForChild("Bobber")
 local greenBar = barFrame:WaitForChild("GreenBar")
@@ -55,17 +55,7 @@ local function stopMouseHold()
     virtualInput:SendMouseButtonEvent(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2, 0, false, game, 1)
 end
 
--- 🔁 AutoFishing loop
-runService.Heartbeat:Connect(function()
-    if autoFishingEnabled and gui.Enabled then
-        local delta = getMidY(greenBar) - getMidY(bobber)
-        if delta > 20 then startMouseHold() elseif delta < 0 then stopMouseHold() end
-    else
-        stopMouseHold()
-    end
-end)
-
--- 🐟 AutoFish + AutoBuy/Use
+-- 🐟 AutoFishing + AutoBuy/Use
 local function autoFish()
     if not autoFishingEnabled then return end
     fishingFolder.CastRod:InvokeServer()
@@ -77,6 +67,15 @@ task.spawn(function()
     while true do
         if autoFishingEnabled then autoFish() end
         wait(4)
+    end
+end)
+
+runService.Heartbeat:Connect(function()
+    if autoFishingEnabled and gui.Enabled then
+        local delta = getMidY(greenBar) - getMidY(bobber)
+        if delta > 20 then startMouseHold() elseif delta < 0 then stopMouseHold() end
+    else
+        stopMouseHold()
     end
 end)
 
@@ -136,15 +135,13 @@ local function teleportToZone(zoneName)
 end
 
 local function getSuperchargeZonePosition()
-    local sc = workspace:FindFirstChild("SuperchargeText")
-    if not sc then
-        for _, zone in ipairs(teleportZones) do
-            teleportToZone(zone)
-            sc = workspace:FindFirstChild("SuperchargeText")
-            if sc then break end
-        end
+    for _, zone in ipairs(teleportZones) do
+        teleportToZone(zone)
+        wait(2)
+        local sc = workspace:FindFirstChild("SuperchargeText")
+        if sc then return sc.CFrame.Position end
     end
-    return sc and sc.CFrame.Position or nil
+    return nil
 end
 
 local function checkForSuperchargedEgg()
@@ -175,7 +172,7 @@ local function checkForSuperchargedEgg()
                 if model then
                     hatchEvent:FireServer(unpack({model, 14}))
                     print("✅ Hatch avviato su:", model.Name)
-                    currentSuperEgg = egg.Name
+                    currentSuperEgg = nil -- forza controllo continuo se cambia
                 end
                 return
             end
@@ -185,13 +182,18 @@ end
 
 task.spawn(function()
     while true do
-        checkForSuperchargedEgg()
-        wait(60)
+        if autoEggEnabled then
+            checkForSuperchargedEgg()
+        end
+        wait(10)
     end
 end)
 
 -- 🎨 GUI
-local guiMain = Instance.new("ScreenGui", player.PlayerGui)
+local guiMain = Instance.new("ScreenGui")
+guiMain.Name = "AutoSystemGUI"
+guiMain.Parent = player:WaitForChild("PlayerGui")
+
 local frame = Instance.new("Frame", guiMain)
 frame.Size = UDim2.new(0, 200, 0, 280)
 frame.Position = UDim2.new(0, 20, 0, 20)
