@@ -40,6 +40,8 @@ local autoMagnetEnabled = false
 local currentSuperEgg = nil
 local currentSuperZone = nil
 local flagsPlaced = false
+local lastCheckedEgg = nil
+local lastCheckTime = 0
 
 -- 🧭 Funzioni base
 local function getMidY(frame)
@@ -102,7 +104,7 @@ local function checkAndUseBasicBait()
     if not autoUseEnabled then return end
     if getBasicBaitStock() > 0 then
         local args = {"Basic Bait", 1}
-        boostFolder.Consume:FireServer(unpack(args))
+        boostFolder:WaitForChild("Consume"):FireServer(unpack(args))
     end
 end
 
@@ -147,6 +149,9 @@ end
 
 local function checkForSuperchargedEgg()
     if not autoEggEnabled then return end
+    local now = tick()
+    if now - lastCheckTime < 60 then return end
+    lastCheckTime = now
     for _, egg in pairs(workspace.Eggs:GetChildren()) do
         if egg:IsA("Model") and egg:FindFirstChild("Egg") then
             local sc = egg.Egg:FindFirstChild("Supercharge")
@@ -184,7 +189,7 @@ local function checkForSuperchargedEgg()
     end
 end
 
-runService.Stepped:Connect(function()
+runService.Heartbeat:Connect(function()
     if autoEggEnabled then
         checkForSuperchargedEgg()
     end
