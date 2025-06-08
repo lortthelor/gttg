@@ -156,11 +156,15 @@ end)
 local function runEventAutoMine()
     if not eventAutoMineEnabled then return end
 
-    local eventPosition = Vector3.new(1231, 94, 2247)
-    teleportTo(eventPosition)
-    wait(2)
+    -- Usare il teletrasporto server-side corretto se disponibile
+    -- Altrimenti usare fallback CFrame
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    hrp.CFrame = CFrame.new(Vector3.new(1231, 99, 2247))
+    task.wait(2)
+
     autoFarmEvent:FireServer()
-    wait(1)
+    task.wait(1)
     magnetEvent:FireServer()
 end
 
@@ -169,7 +173,7 @@ task.spawn(function()
         if eventAutoMineEnabled then
             runEventAutoMine()
         end
-        wait(5)
+        wait(180)
     end
 end)
 
