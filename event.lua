@@ -24,12 +24,6 @@ local greenBar = barFrame:WaitForChild("GreenBar")
 local currency = player:WaitForChild("currency")
 local fishingCash = currency:WaitForChild("FishingCash")
 
--- 🌍 Teleport zone fallback
-local teleportZones = {
-    "Jungle Digsite", "Kingdom Digsite", "Choco Digsite",
-    "Neon Digsite", "Galaxy Digsite", "Arcade Digsite"
-}
-
 -- 🔘 Stati
 local isHolding = false
 local autoFishingEnabled = false
@@ -124,57 +118,25 @@ local function teleportTo(pos)
     hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0))
 end
 
-local function teleportToZone(zoneName)
-    local ok, result = pcall(function()
-        local zone = workspace.BlockRegions:FindFirstChild(zoneName)
-        if zone then
-            local tp = zone.Interactive:FindFirstChild("Teleport")
-            teleportEvent:FireServer(tp)
-        end
-    end)
-    if ok then wait(2.5) end
-end
-
-local function getSuperchargeZonePosition()
-    for _, zone in ipairs(teleportZones) do
-        teleportToZone(zone)
-        wait(2)
-        local sc = workspace:FindFirstChild("SuperchargeText")
-        if sc then return sc.CFrame.Position end
-    end
-    return nil
-end
-
 local function checkForSuperchargedEgg()
     if not autoEggEnabled then return end
     for _, egg in pairs(workspace.Eggs:GetChildren()) do
         if egg:IsA("Model") and egg:FindFirstChild("Egg") then
-            local sc = egg.Egg:FindFirstChild("Supercharge")
-            if sc and egg:GetAttribute("Supercharged") and egg.Name ~= currentSuperEgg then
-                print("🚨 Trovato nuovo Supercharged Egg:", egg.Name)
-                autoFarmEvent:FireServer()
-                wait(1)
-                local zonePos = getSuperchargeZonePosition()
-                if zonePos then
-                    teleportTo(zonePos)
-                    wait(2.5)
-                    autoFarmEvent:FireServer()
-                    magnetEvent:FireServer()
-                    wait(1)
-                end
+            local isSuper = egg:GetAttribute("Supercharged")
+            if isSuper then
+                print("🚨 Trovato Supercharged Egg:", egg.Name)
                 teleportTo(egg:GetPivot().Position)
                 wait(1.5)
+                autoFarmEvent:FireServer()
+                wait(0.5)
                 local autoHatch = player:FindFirstChild("AutoHatch")
                 if autoHatch and not autoHatch.Value then
                     autoHatchEvent:FireServer()
                     wait(0.5)
                 end
-                local model = workspace.Eggs:FindFirstChild(egg.Name)
-                if model then
-                    hatchEvent:FireServer(unpack({model, 14}))
-                    print("✅ Hatch avviato su:", model.Name)
-                    currentSuperEgg = nil
-                end
+                hatchEvent:FireServer(unpack({egg, 14}))
+                print("✅ Hatch su Supercharged Egg:", egg.Name)
+                currentSuperEgg = egg.Name
                 return
             end
         end
@@ -186,7 +148,7 @@ task.spawn(function()
         if autoEggEnabled then
             checkForSuperchargedEgg()
         end
-        wait(300)
+        wait(60)
     end
 end)
 
