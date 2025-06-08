@@ -1,81 +1,95 @@
--- AutoPlant.lua
+-- AutoFarmPlant.lua
 -- LocalScript in StarterPlayerScripts
 
 local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local RepStorage = game:GetService("ReplicatedStorage")
-local player     = Players.LocalPlayer
 
--- RemoteEvent per piantare
+local player     = Players.LocalPlayer
 local PlantEvent = RepStorage
     :WaitForChild("Events")
     :WaitForChild("Farming")
     :WaitForChild("Plant")
 
--- La cartella con la tua griglia 16×7
+-- Percorso rapido alla tua griglia 16×7
 local farmFolder = workspace
     :WaitForChild("MinigameModels")
     :WaitForChild("Farming")
     :WaitForChild("Player")
     :WaitForChild("cubozzi")
 
--- ------------- 1) Legge i semi dalla GUI -------------
-local function getSeedData()
-    local out = {}
-    local mainUi = player:WaitForChild("PlayerGui")
-                       :WaitForChild("MainUi")
+-- =========================
+-- 1) Recupera la GUI Farm
+-- =========================
+local function getFarmGui()
+    local pg = player:WaitForChild("PlayerGui", 5)
+    local mainUi = pg:WaitForChild("MainUi", 5)
     local inv    = mainUi
-        :WaitForChild("InventoryFrame")
-        :WaitForChild("Item")
-        :WaitForChild("Farm")
+        :WaitForChild("InventoryFrame", 5)
+        :WaitForChild("Item", 5)
+        :WaitForChild("Farm", 5)
+    return inv
+end
+
+-- =========================
+-- 2) Legge e ordina i semi
+-- =========================
+local function getSeedData()
+    local inv = getFarmGui()
+    local seeds = {}
 
     for _, seedItem in ipairs(inv:GetChildren()) do
+        -- ogni 'seedItem' è un Frame figlio (es. "Strawberry Seed")
         local frame  = seedItem:FindFirstChild("Frame")
         local amtLbl = frame and frame:FindFirstChild("Amount")
         if amtLbl and amtLbl:IsA("TextLabel") then
             local n = tonumber( amtLbl.Text:match("%d+") ) or 0
             if n > 0 then
-                local t    = seedItem.Name:gsub(" Seed","")          -- es. "Strawberry"
-                local rare = frame:FindFirstChild("RARE") ~= nil     -- seme raro?
-                table.insert(out, { seedType = t, qty = n, isRare = rare })
+                -- Tipo di seme senza la parola " Seed"
+                local t    = seedItem.Name:gsub(" Seed","")
+                -- Raro se ha il child 'RARE'
+                local rare = frame:FindFirstChild("RARE") ~= nil
+                table.insert(seeds, { seedType = t, qty = n, isRare = rare })
             end
         end
     end
 
-    -- ordina: prima i rari, poi alfabetico
-    table.sort(out, function(a,b)
+    -- Ordina: prima i rari, poi per nome
+    table.sort(seeds, function(a,b)
         if a.isRare ~= b.isRare then return a.isRare end
         return a.seedType < b.seedType
     end)
 
-    return out
+    return seeds
 end
 
--- ------------- 2) Ciclo di planting -------------
+-- =========================
+-- 3) Ciclo di planting
+-- =========================
 spawn(function()
     while true do
-        task.wait(0.6)  -- ogni 0.6 secondi
+        task.wait(0.6)  -- ogni 600ms
 
-        -- prendi le quantità aggiornate dei semi
         local seeds = getSeedData()
-        if #seeds == 0 then 
-            -- niente semi, interrompi qui
-            return 
+        if #seeds == 0 then
+            warn("[AutoFarm] Nessun seme trovato, interrompo.")
+            return
         end
 
-        -- percorri la griglia Z=0→6, X=0→15
+        -- Griglia Z = 0→6, X = 0→15
         for z = 0, 6 do
             for x = 0, 15 do
                 local slotName = x.."_"..z
-                local slot     = farmFolder:FindFirstChild(slotName)
-                -- se esiste e non ha ancora pianta
+                local slot = farmFolder:FindFirstChild(slotName)
                 if slot and slot:GetAttribute("HasPlant") == false then
-                    -- trova il primo seme disponibile
+                    -- prendi il primo seme disponibile
                     for _, s in ipairs(seeds) do
                         if s.qty > 0 then
-                            -- pianta
+                            -- esattamente come nel tuo snippet:
                             PlantEvent:FireServer(slot, s.seedType)
                             s.qty = s.qty - 1
-                            task.wait(0.02)  -- piccolo buffer
+                            -- piccolo buffer tra i FireServer
+                            RunService.RenderStepped:Wait()
                             break
                         end
                     end
