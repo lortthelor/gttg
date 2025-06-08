@@ -161,6 +161,8 @@ local function eventBestEggHatch()
     wait(2)
     autoFarmEvent:FireServer()
     wait(1)
+    magnetEvent:FireServer()
+    wait(1)
 
     local bestEgg = nil
     for _, egg in pairs(workspace.Eggs:GetChildren()) do
