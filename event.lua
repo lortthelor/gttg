@@ -24,19 +24,12 @@ local greenBar       = barFrame:WaitForChild("GreenBar")
 local currency       = player:WaitForChild("currency")
 local fishingCash    = currency:WaitForChild("FishingCash")
 
--- 🌍 Teleport zone fallback per SuperEgg
-local teleportZones = {
-    "Jungle Digsite", "Kingdom Digsite", "Choco Digsite",
-    "Neon Digsite", "Galaxy Digsite", "Arcade Digsite"
-}
-
 -- 🔘 Stati
 local isHolding           = false
 local autoFishingEnabled  = false
 local autoBuyEnabled      = false
 local autoUseEnabled      = false
 local autoEggEnabled      = false
-local currentSuperEgg     = nil
 
 -- 🧭 Funzioni base
 local function getMidY(frame)
@@ -128,110 +121,79 @@ task.spawn(function()
     end
 end)
 
--- 🧠 Supercharged Egg Manager
+-- 🧠 Supercharged Egg Manager (loop normale)
 local function teleportTo(pos)
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp  = char:WaitForChild("HumanoidRootPart")
     hrp.CFrame = CFrame.new(pos + Vector3.new(0,5,0))
 end
 
-local function teleportToZone(zoneName)
-    pcall(function()
-        local zone = workspace.BlockRegions:FindFirstChild(zoneName)
-        if zone then
-            local tp = zone.Interactive:FindFirstChild("Teleport")
-            teleportEvent:FireServer(tp)
-        end
-    end)
-    wait(2.5)
-end
-
-local function getSuperchargeZonePosition()
-    for _, zone in ipairs(teleportZones) do
-        teleportToZone(zone)
-        wait(2)
-        local sc = workspace:FindFirstChild("SuperchargeText")
-        if sc then return sc.CFrame.Position end
-    end
-    return nil
-end
-
 local function checkForSuperchargedEgg()
     if not autoEggEnabled then return end
     for _, egg in pairs(workspace.Eggs:GetChildren()) do
-        if egg:IsA("Model") and egg:FindFirstChild("Egg") then
-            if egg:GetAttribute("Supercharged") and egg.Name ~= currentSuperEgg then
-                autoFarmEvent:FireServer()
-                wait(1)
-                local zonePos = getSuperchargeZonePosition()
-                if zonePos then
-                    teleportTo(zonePos)
-                    wait(2.5)
-                    autoFarmEvent:FireServer()
-                    magnetEvent:FireServer()
-                    wait(1)
-                end
-                teleportTo(egg:GetPivot().Position)
-                wait(1.5)
-                local autoHatch = player:FindFirstChild("AutoHatch")
-                if autoHatch and not autoHatch.Value then
-                    autoHatchEvent:FireServer()
-                    wait(0.5)
-                end
-                local model = workspace.Eggs:FindFirstChild(egg.Name)
-                if model then
-                    hatchEvent:FireServer(unpack({model, 14}))
-                    currentSuperEgg = nil
-                end
-                return
+        if egg:IsA("Model") and egg:FindFirstChild("Egg")
+        and egg:GetAttribute("Supercharged") then
+
+            -- auto-farm + magnet nella zona attuale
+            autoFarmEvent:FireServer()
+            wait(1)
+            teleportTo(egg:GetPivot().Position)
+            wait(1.5)
+
+            -- auto-hatch
+            local autoHatch = player:FindFirstChild("AutoHatch")
+            if autoHatch and not autoHatch.Value then
+                autoHatchEvent:FireServer()
+                wait(0.5)
             end
+            hatchEvent:FireServer(unpack({egg,14}))
+            return
         end
     end
 end
 
 task.spawn(function()
     while true do
-        if autoEggEnabled then
-            checkForSuperchargedEgg()
-        end
+        checkForSuperchargedEgg()
         wait(300)
     end
 end)
 
--- 🌈 One-Shot Event Hatch
+-- 🌈 One-Shot Event Hatch (solo su pulsante)
 local eventCoords = Vector3.new(1231, 94, 2247)
 
--- Trova l’uovo con rarità più alta
-local function getBestEgg()
-    local best = nil
+local function getEventSuperchargedEgg()
     for _, egg in pairs(workspace.Eggs:GetChildren()) do
-        if egg:IsA("Model") and egg:FindFirstChild("Egg") then
-            local rarity = egg:GetAttribute("Rarity") or 0
-            if not best or rarity > (best:GetAttribute("Rarity") or 0) then
-                best = egg
-            end
+        if egg:IsA("Model") and egg:FindFirstChild("Egg")
+        and egg:GetAttribute("Supercharged") then
+            return egg
         end
     end
-    return best
+    return nil
 end
 
--- Esegue un singolo event hatch
 local function runEventHatch()
-    -- teletrasporto + autofarm
+    -- 1) teleport evento
     teleportTo(eventCoords)
     wait(2)
+    -- 2) auto-farm
     autoFarmEvent:FireServer()
     wait(2)
-    -- best egg
-    local egg = getBestEgg()
+    -- 3) trova il supercharged egg nella zona evento
+    local egg = getEventSuperchargedEgg()
     if egg then
+        teleportTo(egg:GetPivot().Position)
+        wait(1)
+        -- 4) auto-hatch
         local autoHatch = player:FindFirstChild("AutoHatch")
         if autoHatch and not autoHatch.Value then
             autoHatchEvent:FireServer()
-            wait(1)
+            wait(0.5)
         end
-        hatchEvent:FireServer(unpack({egg, 14}))
-        print("🌈 Event Hatch eseguito su:", egg.Name)
+        hatchEvent:FireServer(unpack({egg,14}))
+        print("🌈 Event Supercharged Hatch eseguito su:", egg.Name)
+    else
+        warn("❌ Nessun Supercharged Egg trovato nell'Event Zone")
     end
 end
 
@@ -241,7 +203,7 @@ guiMain.Name   = "AutoSystemGUI"
 guiMain.Parent = player:WaitForChild("PlayerGui")
 
 local frame = Instance.new("Frame", guiMain)
-frame.Size             = UDim2.new(0, 200, 0, 300)
+frame.Size             = UDim2.new(0, 220, 0, 340)
 frame.Position         = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 frame.Active           = true
@@ -283,11 +245,11 @@ local function makeToggle(name, y, default, callback)
     end)
 end
 
--- posizioni dei toggle (dopo i 30px del titolo)
-makeToggle("AutoFishing",    40,  false, function(v) autoFishingEnabled = v end)
-makeToggle("AutoCompra Bait",90,  false, function(v) autoBuyEnabled     = v end)
-makeToggle("AutoUsa Bait",   140, false, function(v) autoUseEnabled    = v end)
-makeToggle("AutoSuperEgg",   190, false, function(v) autoEggEnabled    = v end)
+-- toggles
+makeToggle("AutoFishing",     40,  false, function(v) autoFishingEnabled = v end)
+makeToggle("AutoCompra Bait", 90,  false, function(v) autoBuyEnabled     = v end)
+makeToggle("AutoUsa Bait",    140, false, function(v) autoUseEnabled    = v end)
+makeToggle("AutoSuperEgg",    190, false, function(v) autoEggEnabled    = v end)
 
 -- pulsante one-shot Event Hatch
 local eventBtn = Instance.new("TextButton", frame)
@@ -301,10 +263,8 @@ eventBtn.Text             = "Run Event Hatch"
 Instance.new("UICorner", eventBtn).CornerRadius = UDim.new(0, 8)
 
 eventBtn.MouseButton1Click:Connect(function()
-    -- esegui solo la prima volta
     eventBtn.Active = false
     eventBtn.Text   = "Running..."
     runEventHatch()
-    -- lasciamo il pulsante disattivato
     eventBtn.Text = "Done"
 end)
