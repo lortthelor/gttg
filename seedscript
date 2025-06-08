@@ -1,4 +1,5 @@
--- AutoFarmV2.lua
+-- AutoFarmGrid.lua
+-- Metti in StarterPlayer → StarterPlayerScripts
 
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,20 +8,20 @@ local RepStorage = game:GetService("ReplicatedStorage")
 local player     = Players.LocalPlayer
 local rootPart
 
--- RemoteEvent usato per piantare
+-- RemoteEvent per piantare
 local PlantEvent = RepStorage
   :WaitForChild("Events")
   :WaitForChild("Farming")
   :WaitForChild("Plant")
 
--- Cartella “slot” del campo
-local farmSlots = workspace
+-- Cartella con i 16×7 “slot”
+local farmFolder = workspace
   :WaitForChild("MinigameModels")
   :WaitForChild("Farming")
   :WaitForChild("Player")
   :WaitForChild("cubozzi")
 
--- Tenere sempre aggiornato rootPart
+-- Aggiorna rootPart ad ogni respawn
 player.CharacterAdded:Connect(function(char)
     rootPart = char:WaitForChild("HumanoidRootPart")
 end)
@@ -28,7 +29,12 @@ if player.Character then
     rootPart = player.Character:WaitForChild("HumanoidRootPart")
 end
 
--- Legge quantità e rarità dei semi dalla GUI
+-- Trova ricorsivamente la ProximityPrompt in un modello
+local function findPrompt(model)
+    return model:FindFirstChildWhichIsA("ProximityPrompt", true)
+end
+
+-- Leggi i semi dalla GUI e ordina per rarità prima
 local function getSeedData()
     local out = {}
     local farmGui = player.PlayerGui
@@ -40,74 +46,70 @@ local function getSeedData()
     for _, seedItem in ipairs(farmGui:GetChildren()) do
         local frame = seedItem:FindFirstChild("Frame")
         if frame then
-            local amt = frame:FindFirstChild("Amount")
-            if amt and amt:IsA("TextLabel") then
-                local n = tonumber(amt.Text:match("%d+")) or 0
+            local amtLbl = frame:FindFirstChild("Amount")
+            if amtLbl and amtLbl:IsA("TextLabel") then
+                local n = tonumber(amtLbl.Text:match("%d+")) or 0
                 if n > 0 then
-                    local t = seedItem.Name:gsub(" Seed","")
-                    local rare = frame:FindFirstChild("RARE") and true or false
-                    table.insert(out, { seedType = t, qty = n, isRare = rare })
+                    local name = seedItem.Name:gsub(" Seed","")
+                    local rare = frame:FindFirstChild("RARE")~=nil
+                    table.insert(out, { seedType = name, qty = n, isRare = rare })
                 end
             end
         end
     end
-
-    -- Ordino: prima i rari, poi il resto (alfabetico)
     table.sort(out, function(a,b)
         if a.isRare ~= b.isRare then return a.isRare end
         return a.seedType < b.seedType
     end)
-
     return out
 end
 
--- *** HARVEST ***
--- Scansiona *tutti* i ProximityPrompt nel gioco: quelli attivi sul campo sono SOLO per raccogliere
-local harvested = {}
-RunService.Heartbeat:Connect(function()
-    if not rootPart then return end
-
-    for _, prompt in ipairs(workspace:GetDescendants()) do
-        if prompt:IsA("ProximityPrompt") then
-            local mdl = prompt.Parent
-            -- evito di raccogliere più volte lo stesso modello
-            if not harvested[mdl] then
-                harvested[mdl] = true
-                -- teletrasporto 3 stud sopra il pivot
-                local cf = (mdl.GetPivot and mdl:GetPivot()) or mdl.PrimaryPart.CFrame
-                rootPart.CFrame = cf * CFrame.new(0,3,0)
-                RunService.Heartbeat:Wait()
-                -- simulo il “hold” del prompt
-                prompt:InputHoldBegin()
-                task.wait(prompt.HoldDuration + 0.03)
-                prompt:InputHoldEnd()
-                -- pausa brevissima
-                task.wait(0.02)
-            end
-        end
-    end
-end)
-
--- *** PLANT ***
--- Ogni 0.7s controllo quali slot sono vuoti e li pianto con la priorità sui semi più rari
+-- Ciclo principale
 spawn(function()
     while true do
-        task.wait(0.7)
-        if not rootPart then continue end
+        if not rootPart then
+            wait(0.5)
+            continue
+        end
 
+        -- 1) HARVEST: cerco le piante mature solo nei miei slot
+        local toHarvest = {}
+        for _, slot in ipairs(farmFolder:GetChildren()) do
+            local prompt = findPrompt(slot)
+            if prompt then
+                table.insert(toHarvest, { slot = slot, prompt = prompt })
+            end
+        end
+        for _, info in ipairs(toHarvest) do
+            -- teletrasporto 3 stud sopra
+            local cf = (info.slot.GetPivot and info.slot:GetPivot()) or info.slot.PrimaryPart.CFrame
+            rootPart.CFrame = cf * CFrame.new(0,3,0)
+            RunService.Heartbeat:Wait()
+            info.prompt:InputHoldBegin()
+            task.wait(info.prompt.HoldDuration + 0.02)
+            info.prompt:InputHoldEnd()
+            task.wait(0.02)
+        end
+
+        -- 2) PLANT: grid 16×7 (Z=0→6, X=0→15)
         local seeds = getSeedData()
-        for _, slot in ipairs(farmSlots:GetChildren()) do
-            -- qui uso l’attributo HasPlant SOLO per capire se piantare o meno
-            if slot:GetAttribute("HasPlant") == false then
-                for _, s in ipairs(seeds) do
-                    if s.qty > 0 then
-                        PlantEvent:FireServer(slot, s.seedType)
-                        s.qty = s.qty - 1
-                        task.wait(0.04)
-                        break
+        for z = 0, 6 do
+            for x = 0, 15 do
+                local slotName = x.."_"..z
+                local slot = farmFolder:FindFirstChild(slotName)
+                if slot and slot:GetAttribute("HasPlant") == false then
+                    for _, s in ipairs(seeds) do
+                        if s.qty > 0 then
+                            PlantEvent:FireServer(slot, s.seedType)
+                            s.qty = s.qty - 1
+                            task.wait(0.02)
+                            break
+                        end
                     end
                 end
             end
         end
+
+        task.wait(0.5)
     end
 end)
