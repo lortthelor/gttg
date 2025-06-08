@@ -169,7 +169,7 @@ task.spawn(function()
         if eventAutoMineEnabled then
             runEventAutoMine()
         end
-        wait(180)
+        wait(5)
     end
 end)
 
