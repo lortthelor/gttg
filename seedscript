@@ -1,142 +1,81 @@
--- AutoFarmComplete.lua
--- LocalScript da mettere in StarterPlayerScripts
+-- AutoPlant.lua
+-- LocalScript in StarterPlayerScripts
 
 local Players    = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local RepStorage = game:GetService("ReplicatedStorage")
-
 local player     = Players.LocalPlayer
-local rootPart
 
 -- RemoteEvent per piantare
 local PlantEvent = RepStorage
-  :WaitForChild("Events")
-  :WaitForChild("Farming")
-  :WaitForChild("Plant")
+    :WaitForChild("Events")
+    :WaitForChild("Farming")
+    :WaitForChild("Plant")
 
--- Cartella 16×7 con i tuoi slot di semina
+-- La cartella con la tua griglia 16×7
 local farmFolder = workspace
-  :WaitForChild("MinigameModels")
-  :WaitForChild("Farming")
-  :WaitForChild("Player")
-  :WaitForChild("cubozzi")
+    :WaitForChild("MinigameModels")
+    :WaitForChild("Farming")
+    :WaitForChild("Player")
+    :WaitForChild("cubozzi")
 
--- ========== 1) SETUP CHARACTER ==========
--- Prendi sempre l’HumanoidRootPart del player
-local function setupCharacter(char)
-    rootPart = char:WaitForChild("HumanoidRootPart", 5)
-end
-
-if player.Character then
-    setupCharacter(player.Character)
-end
-player.CharacterAdded:Connect(setupCharacter)
-
--- ========== 2) FUNZIONE PER LEGGERE I SEMI ==========
+-- ------------- 1) Legge i semi dalla GUI -------------
 local function getSeedData()
     local out = {}
-    -- Accedi con timeout per non freeze
-    local mainUi = player:WaitForChild("PlayerGui", 5)
-                     :WaitForChild("MainUi", 5)
-    if not mainUi then return out end
-
-    local inv = mainUi
-        :WaitForChild("InventoryFrame", 5)
-        :WaitForChild("Item", 5)
-        :WaitForChild("Farm", 5)
-    if not inv then return out end
+    local mainUi = player:WaitForChild("PlayerGui")
+                       :WaitForChild("MainUi")
+    local inv    = mainUi
+        :WaitForChild("InventoryFrame")
+        :WaitForChild("Item")
+        :WaitForChild("Farm")
 
     for _, seedItem in ipairs(inv:GetChildren()) do
-        local frame = seedItem:FindFirstChild("Frame")
+        local frame  = seedItem:FindFirstChild("Frame")
         local amtLbl = frame and frame:FindFirstChild("Amount")
         if amtLbl and amtLbl:IsA("TextLabel") then
             local n = tonumber( amtLbl.Text:match("%d+") ) or 0
             if n > 0 then
-                local seedType = seedItem.Name:gsub(" Seed","")
-                local isRare   = frame:FindFirstChild("RARE")~=nil
-                table.insert(out, {
-                    seedType = seedType,
-                    qty      = n,
-                    isRare   = isRare
-                })
+                local t    = seedItem.Name:gsub(" Seed","")          -- es. "Strawberry"
+                local rare = frame:FindFirstChild("RARE") ~= nil     -- seme raro?
+                table.insert(out, { seedType = t, qty = n, isRare = rare })
             end
         end
     end
 
-    -- ordina: prima rari, poi alfabetico
+    -- ordina: prima i rari, poi alfabetico
     table.sort(out, function(a,b)
-        if a.isRare ~= b.isRare then
-            return a.isRare
-        else
-            return a.seedType < b.seedType
-        end
+        if a.isRare ~= b.isRare then return a.isRare end
+        return a.seedType < b.seedType
     end)
 
     return out
 end
 
--- ========== 3) UTILITY: trova ProximityPrompt ==========
-local function findPrompt(model)
-    -- cerca anche nelle sottocartelle
-    for _, d in ipairs(model:GetDescendants()) do
-        if d:IsA("ProximityPrompt") then
-            return d
-        end
-    end
-    return nil
-end
-
--- ========== 4) CICLO HARVEST ==========
--- raccolta: ogni frame controlla i prompt SOLO nei tuoi slot
-local harvested = {}  -- per non ripassare sui già raccolti
-RunService.Heartbeat:Connect(function()
-    if not rootPart then return end
-
-    for _, slot in ipairs(farmFolder:GetChildren()) do
-        if not harvested[slot] then
-            local prompt = findPrompt(slot)
-            if prompt then
-                harvested[slot] = true
-                -- teletrasporto 3 stud sopra il pivot
-                local cf = (slot.GetPivot and slot:GetPivot()) or slot.PrimaryPart.CFrame
-                rootPart.CFrame = cf * CFrame.new(0,3,0)
-                RunService.Heartbeat:Wait()
-
-                -- simula il hold per raccogliere
-                prompt:InputHoldBegin()
-                task.wait(prompt.HoldDuration + 0.02)
-                prompt:InputHoldEnd()
-
-                task.wait(0.02)
-            end
-        end
-    end
-end)
-
--- ========== 5) CICLO PLANT ==========
--- ogni 0.7s riempi gli slot vuoti in ordine di griglia
+-- ------------- 2) Ciclo di planting -------------
 spawn(function()
     while true do
-        task.wait(0.7)
-        if not rootPart then continue end
+        task.wait(0.6)  -- ogni 0.6 secondi
 
-        -- aggiorno la lista dei semi
+        -- prendi le quantità aggiornate dei semi
         local seeds = getSeedData()
-        -- reset harvested per il prossimo harvest
-        harvested = {}
+        if #seeds == 0 then 
+            -- niente semi, interrompi qui
+            return 
+        end
 
-        -- griglia Z=0→6, X=0→15
+        -- percorri la griglia Z=0→6, X=0→15
         for z = 0, 6 do
             for x = 0, 15 do
                 local slotName = x.."_"..z
-                local slot = farmFolder:FindFirstChild(slotName)
+                local slot     = farmFolder:FindFirstChild(slotName)
+                -- se esiste e non ha ancora pianta
                 if slot and slot:GetAttribute("HasPlant") == false then
-                    -- cerca il primo seme con qty>0
+                    -- trova il primo seme disponibile
                     for _, s in ipairs(seeds) do
                         if s.qty > 0 then
+                            -- pianta
                             PlantEvent:FireServer(slot, s.seedType)
                             s.qty = s.qty - 1
-                            task.wait(0.02)
+                            task.wait(0.02)  -- piccolo buffer
                             break
                         end
                     end
