@@ -1,5 +1,5 @@
--- ✅ SCRIPT COMPLETO "AUTO SYSTEM" + EventHatch Mode
--- Gestisce: AutoFishing + AutoBait + Supercharged Eggs + Hatch + Magnet + GUI + EventHatch
+-- ✅ SCRIPT COMPLETO "AUTO SYSTEM" + EventAutoMine Mode
+-- Gestisce: AutoFishing + AutoBait + Supercharged Eggs + Hatch + Magnet + GUI + EventAutoMine
 
 local player = game.Players.LocalPlayer
 local replicated = game:GetService("ReplicatedStorage")
@@ -30,7 +30,7 @@ local autoFishingEnabled = false
 local autoBuyEnabled = false
 local autoUseEnabled = false
 local autoEggEnabled = false
-local eventHatchEnabled = false
+local eventAutoMineEnabled = false
 local currentSuperEgg = nil
 
 -- 🧭 Funzioni base
@@ -152,9 +152,9 @@ task.spawn(function()
     end
 end)
 
--- 🗺️ Event Hatch
-local function eventBestEggHatch()
-    if not eventHatchEnabled then return end
+-- 🗺️ Event AutoMine
+local function runEventAutoMine()
+    if not eventAutoMineEnabled then return end
 
     local eventPosition = Vector3.new(1231, 94, 2247)
     teleportTo(eventPosition)
@@ -162,35 +162,12 @@ local function eventBestEggHatch()
     autoFarmEvent:FireServer()
     wait(1)
     magnetEvent:FireServer()
-    wait(1)
-
-    local bestEgg = nil
-    for _, egg in pairs(workspace.Eggs:GetChildren()) do
-        if egg:IsA("Model") and egg:FindFirstChild("Egg") then
-            if egg:GetAttribute("Supercharged") then
-                bestEgg = egg
-                break
-            elseif not bestEgg then
-                bestEgg = egg
-            end
-        end
-    end
-
-    if bestEgg then
-        local autoHatch = player:FindFirstChild("AutoHatch")
-        if autoHatch and not autoHatch.Value then
-            autoHatchEvent:FireServer()
-            wait(0.5)
-        end
-        hatchEvent:FireServer(unpack({bestEgg, 14}))
-        print("🌟 Event Hatch su:", bestEgg.Name)
-    end
 end
 
 task.spawn(function()
     while true do
-        if eventHatchEnabled then
-            eventBestEggHatch()
+        if eventAutoMineEnabled then
+            runEventAutoMine()
         end
         wait(180)
     end
@@ -230,4 +207,4 @@ makeToggle("AutoFishing", 10, false, function(v) autoFishingEnabled = v end)
 makeToggle("AutoCompra Bait", 60, false, function(v) autoBuyEnabled = v end)
 makeToggle("AutoUsa Bait", 110, false, function(v) autoUseEnabled = v end)
 makeToggle("AutoSuperEgg", 160, false, function(v) autoEggEnabled = v end)
-makeToggle("EventHatch", 210, false, function(v) eventHatchEnabled = v end)
+makeToggle("EventAutoMine", 210, false, function(v) eventAutoMineEnabled = v end)
