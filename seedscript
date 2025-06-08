@@ -1,0 +1,124 @@
+-- AutoFarmFull.lua
+-- Metti questo script in StarterPlayerScripts
+
+local Players       = game:GetService("Players")
+local RunService    = game:GetService("RunService")
+local RepStorage    = game:GetService("ReplicatedStorage")
+
+local player        = Players.LocalPlayer
+local rootPart
+
+-- RemoteEvent per piantare
+local PlantEvent = RepStorage
+    :WaitForChild("Events")
+    :WaitForChild("Farming")
+    :WaitForChild("Plant")
+
+-- Cartella delle piantagioni
+local farmFolder = workspace
+    :WaitForChild("MinigameModels")
+    :WaitForChild("Farming")
+    :WaitForChild("Player")
+    :WaitForChild("cubozzi")
+
+-- Assicuriamoci di catturare sempre l'HumanoidRootPart
+local function onCharacterAdded(char)
+    rootPart = char:WaitForChild("HumanoidRootPart")
+end
+if player.Character then onCharacterAdded(player.Character) end
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Trova il ProximityPrompt dentro un modello (se esiste)
+local function findPrompt(model)
+    for _, d in ipairs(model:GetDescendants()) do
+        if d:IsA("ProximityPrompt") then
+            return d
+        end
+    end
+end
+
+-- Legge quantità e rarità dei semi dalla GUI
+local function getSeedData()
+    local data = {}
+    local farmGui = player
+        :WaitForChild("PlayerGui")
+        :WaitForChild("MainUi")
+        :WaitForChild("InventoryFrame")
+        :WaitForChild("Item")
+        :WaitForChild("Farm")
+
+    for _, seedItem in ipairs(farmGui:GetChildren()) do
+        -- ogni seedItem.Name è tipo "Strawberry Seed", "Blueberry Seed", ecc.
+        local frame = seedItem:FindFirstChild("Frame")
+        if frame then
+            local amtLabel = frame:FindFirstChild("Amount")
+            if amtLabel and amtLabel:IsA("TextLabel") then
+                local qty = tonumber( amtLabel.Text:match("%d+") ) or 0
+                if qty > 0 then
+                    -- Determino il nome da passare al server ("Strawberry", senza " Seed")
+                    local seedType = seedItem.Name:gsub(" Seed","")
+                    -- Rarità basata sulla presenza del child "RARE"
+                    local isRare = frame:FindFirstChild("RARE")~=nil
+                    table.insert(data, { seedType = seedType, qty = qty, isRare = isRare })
+                end
+            end
+        end
+    end
+
+    -- Ordino: prima i più rari, poi gli altri (ordine alfabetico come secondario)
+    table.sort(data, function(a,b)
+        if a.isRare ~= b.isRare then
+            return a.isRare
+        else
+            return a.seedType < b.seedType
+        end
+    end)
+
+    return data
+end
+
+-- Funzione principale, ciclo unico che fa harvest + planting
+spawn(function()
+    while true do
+        if rootPart then
+            -- **1) HARVEST**
+            for _, plant in ipairs(farmFolder:GetChildren()) do
+                local has = plant:GetAttribute("HasPlant")
+                local stage = plant:GetAttribute("CurrentStage")
+                if has and type(stage)=="number" and stage >= 5 then
+                    -- Teletrasporto 3 stud sopra il pivot della pianta
+                    local pivot = plant:GetPivot()
+                    rootPart.CFrame = pivot * CFrame.new(0, 3, 0)
+                    RunService.Heartbeat:Wait()
+                    -- Simulo la pressione del ProximityPrompt
+                    local prompt = findPrompt(plant)
+                    if prompt then
+                        prompt:InputHoldBegin()
+                        task.wait(prompt.HoldDuration + 0.01)
+                        prompt:InputHoldEnd()
+                    end
+                    task.wait(0.03)  -- leggerissimo buffer
+                end
+            end
+
+            -- **2) PLANT**
+            local seeds = getSeedData()
+            for _, slot in ipairs(farmFolder:GetChildren()) do
+                if not slot:GetAttribute("HasPlant") then
+                    -- cerco il primo seed ancora disponibile
+                    for _, s in ipairs(seeds) do
+                        if s.qty > 0 then
+                            -- pianto
+                            PlantEvent:FireServer(slot, s.seedType)
+                            s.qty = s.qty - 1
+                            task.wait(0.02)
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
+        task.wait(0.8)  -- aspetto poco meno di 1s prima del prossimo ciclo
+    end
+end)
